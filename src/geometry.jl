@@ -55,14 +55,24 @@ struct MoireGeometry
     Mp_M::Vector{Float64}         # midpoint(K_M, q_1)  -- BZ edge midpoint
 end
 
+# Package defaults.  Nothing in this file is material-specific: `a0` and
+# `theta_deg` are pure inputs and every derived quantity follows from them.  The
+# defaults are the paper's MoTe2 / 3.89 deg so that a bare `moire_geometry()` is
+# the paper's geometry; parameters.jl re-exports the same numbers as
+# `A0_MOTE2` / `THETA_DEG` and labels the fitted parameter sets with the
+# (material, angle) they are valid at.
+const A0_DEFAULT        = 3.52
+const THETA_DEFAULT_DEG = 3.89
+
 """
-    moire_geometry(; a0 = 3.52, theta_deg = 3.89, Nshell = 5)
+    moire_geometry(; a0 = A0_DEFAULT, theta_deg = THETA_DEFAULT_DEG, Nshell = 5)
 
 Build the moire geometry.  `Nshell` is the hexagonal truncation of the
 reciprocal shell: |m1| <= N, |m2| <= N, |m1+m2| <= N  (same idea as
 `moireband_PRL122.jl:79-101`, generalised).
 """
-function moire_geometry(; a0::Real = 3.52, theta_deg::Real = 3.89, Nshell::Int = 5)
+function moire_geometry(; a0::Real = A0_DEFAULT, theta_deg::Real = THETA_DEFAULT_DEG,
+                        Nshell::Int = 5)
     theta = deg2rad(float(theta_deg))
 
     # (B1)

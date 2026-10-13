@@ -7,18 +7,145 @@
 #
 # All energies in meV, masses in units of the free electron mass m_e,
 # momenta in Angstrom^-1.
+#
+# A parameter set is a `ParamSet`: a physics payload (`KParams` / `GammaParams`)
+# wrapped together with a `ParamRef` that records WHERE the numbers came from and
+# WHICH geometry they are valid at.  The reason is that Table I and Table II are
+# fits to the DFT bands **at theta = 3.89 deg, for MoTe2 only** -- they are not
+# material constants.  The FH+SH set in particular uses its second harmonics to
+# encode lattice relaxation, which grows with the moire period: the DFT top
+# valence bandwidth is 12.8 meV at 3.89 deg and 133.3 meV at 9.43 deg (Table V).
+# Pairing a parameter set with a geometry it was not fitted at is a real physics
+# error that does not announce itself, so `check_parameters` (called at the top of
+# `hamiltonian` and `transcribe_hamiltonian`) turns it into a loud one.
+#
+# Note on `const`: these bindings stay `const`.  For an immutable record that is
+# idiomatic and does NOT restrict generality -- any number of further `ParamSet`s
+# (other materials, angles, harmonics) can be defined alongside these; `const`
+# only forbids rebinding the same name.  Dropping it would be worse: a non-const
+# global is typed `Any` at each use site.
 # =============================================================================
+
+# -----------------------------------------------------------------------------
+# provenance and validity
+# -----------------------------------------------------------------------------
+"""how a parameter set was obtained"""
+@enum Provenance FITTED CALIBRATED PLACEHOLDER EXPLORATORY
+
+"""
+    ParamRef(; material, a0, theta_deg, stacking, valley, harmonics,
+               provenance, source, calibrated_at)
+
+Where a parameter set came from, and the geometry it is valid at.
+
+`a0` and `theta_deg` use `NaN` for "this record makes no claim about its
+geometry".  That is what `ParamRef()` -- and hence any hand-built bare
+`KParams` / `GammaParams` -- produces, so a record that says nothing is exempt
+from `check_parameters` and hand-built parameter sets stay unconstrained by
+default.  `provenance = EXPLORATORY` is the explicit form of the same statement.
+"""
+struct ParamRef
+    material::Symbol       # :MoTe2, :unknown, ...
+    a0::Float64            # valid at this monolayer lattice constant (Ang); NaN = no claim
+    theta_deg::Float64     # valid at this twist angle (deg); NaN = no claim
+    stacking::Symbol       # :AA, :AB, :unknown
+    valley::Symbol         # :K, :Gamma, :unknown
+    harmonics::Symbol      # :FH, :FHSH, :none
+    provenance::Provenance
+    source::String         # which paper / table / rule
+    calibrated_at::Union{Nothing,Tuple{Float64,Float64}}   # (a0, theta_deg) for CALIBRATED
+end
+
+ParamRef(; material::Symbol = :unknown, a0::Real = NaN, theta_deg::Real = NaN,
+         stacking::Symbol = :unknown, valley::Symbol = :unknown,
+         harmonics::Symbol = :none, provenance::Provenance = EXPLORATORY,
+         source::AbstractString = "", calibrated_at = nothing) =
+    ParamRef(material, float(a0), float(theta_deg), stacking, valley, harmonics,
+             provenance, String(source), calibrated_at)
+
+# -----------------------------------------------------------------------------
+# materials -- `a0` is geometry, not a fitted number, so it gets its own record
+# -----------------------------------------------------------------------------
+"""
+    Material(name, a0, display)
+
+A monolayer lattice constant.  Nothing in these continuum models is
+material-specific except the numbers fitted to it, and those live in a
+`ParamSet`; a `Material` exists so that `a0` stops being a bare literal.
+
+To add a material, add one of these next to its own `ParamSet`s -- there is no
+registry to update.  Note that PRB 109, 205121 (2024) fits **only** MoTe2, so a
+new material needs its own V, psi, w, ... from whatever source you are using;
+its geometry needs nothing but `a0`.
+"""
+struct Material
+    name::Symbol
+    a0::Float64
+    display::String
+end
 
 """monolayer lattice constant of MoTe2.  Experimental a = 3.519 Ang (App. A1);
 DFT-D2 gives 3.518.  The paper's fits use a_0 = 3.52 Ang."""
-const A0_MOTE2 = 3.52
+const A0_MOTE2 = A0_DEFAULT
 
-const THETA_DEG = 3.89        # the twist angle used for every fit in the paper
+"""the twist angle every fit in the paper is made at"""
+const THETA_DEG = THETA_DEFAULT_DEG
+
+const MOTE2 = Material(:MoTe2, A0_MOTE2, "MoTe2")
+
+"""`moire_geometry(MOTE2)` == `moire_geometry(a0 = 3.52, ...)`; same for any Material."""
+moire_geometry(mat::Material; theta_deg::Real = THETA_DEFAULT_DEG, Nshell::Int = 5) =
+    moire_geometry(; a0 = mat.a0, theta_deg = theta_deg, Nshell = Nshell)
+
+# -----------------------------------------------------------------------------
+# the wrapper: metadata + payload
+# -----------------------------------------------------------------------------
+"""supertype of the two physics payloads"""
+abstract type AbstractParams end
+
+"""
+    ParamSet{P<:AbstractParams}
+
+A parameter set: `params` is the physics payload, `ref` says where it came from
+and which geometry it is valid at.
+
+The public API takes a `ParamSet`; the assembly kernels (`ham_AA_K`, the
+potentials in potentials.jl, the transcriptions in transcribe.jl) still take a
+bare payload and dispatch on its concrete type, so `payload` is unwrapped at the
+boundary -- see `hamiltonian` in kmodels.jl.
+"""
+struct ParamSet{P<:AbstractParams}
+    ref::ParamRef
+    params::P
+end
+
+"""the physics payload, wrapped or not"""
+payload(ps::ParamSet) = ps.params
+payload(p::AbstractParams) = p
+
+"""the provenance record; a bare payload makes no claim"""
+paramref(ps::ParamSet) = ps.ref
+paramref(::AbstractParams) = ParamRef()
+
+label(ps::ParamSet) = ps.params.label
+label(p::AbstractParams) = p.label
+
+"""
+    exploratory(ps::ParamSet) -> ParamSet
+
+The same payload carrying a provenance record that makes no claim about its
+geometry, so `check_parameters` will not fire.  Use this when you *deliberately*
+want to evaluate paper parameters at another material or angle.
+"""
+exploratory(ps::ParamSet) = ParamSet(
+    ParamRef(material = paramref(ps).material, stacking = paramref(ps).stacking,
+             valley = paramref(ps).valley, harmonics = paramref(ps).harmonics,
+             provenance = EXPLORATORY, source = paramref(ps).source), ps.params)
 
 # -----------------------------------------------------------------------------
 # +/-K valley: (B15)/(B17)/(B20)/(B21) for AA and (C4)/(C8) for AB
 # -----------------------------------------------------------------------------
-struct KParams
+struct KParams <: AbstractParams
     mstar::Float64     # effective mass m* (m_e), same in both layers and valleys
     V::Float64         # first-harmonic potential amplitude
     psi::Float64       # potential phase (radians)
@@ -28,19 +155,42 @@ struct KParams
     label::String
 end
 
+KParams(; mstar, V, psi, w, V2 = 0.0, w2 = 0.0, label = "") =
+    KParams(float(mstar), float(V), float(psi), float(w), float(V2), float(w2), label)
+
+const _TABLE_I = "PRB 109, 205121 (2024), Table I"
+
 """Table I -- AA stacking, +-K valley, first harmonics only (V2 = w2 = 0)"""
-const AA_K_FH = KParams(0.60, 16.5, deg2rad(-105.9), -18.8, 0.0, 0.0, "AA +/-K FH")
+const AA_K_FH = ParamSet(
+    ParamRef(material = :MoTe2, a0 = A0_MOTE2, theta_deg = THETA_DEG,
+             stacking = :AA, valley = :K, harmonics = :FH, provenance = FITTED,
+             source = "$_TABLE_I; fit to the DFT bands at theta = 3.89 deg"),
+    KParams(mstar = 0.60, V = 16.5, psi = deg2rad(-105.9), w = -18.8,
+            V2 = 0.0, w2 = 0.0, label = "AA +/-K FH"))
 
 """Table I -- AA stacking, +-K valley, first + second harmonics"""
-const AA_K_FHSH = KParams(0.62, 7.94, deg2rad(-88.43), -10.77, 20.00, 10.21, "AA +/-K FH+SH")
+const AA_K_FHSH = ParamSet(
+    ParamRef(material = :MoTe2, a0 = A0_MOTE2, theta_deg = THETA_DEG,
+             stacking = :AA, valley = :K, harmonics = :FHSH, provenance = FITTED,
+             source = "$_TABLE_I; fit to the DFT bands at theta = 3.89 deg.  The " *
+                      "second harmonics stand in for lattice relaxation, which is " *
+                      "what makes this set the most angle-sensitive of the five"),
+    KParams(mstar = 0.62, V = 7.94, psi = deg2rad(-88.43), w = -10.77,
+            V2 = 20.00, w2 = 10.21, label = "AA +/-K FH+SH"))
 
 """Table II -- AB stacking, +-K valley.  The AB +/-K model (C8) has no SH terms."""
-const AB_K = KParams(0.62, 53.0, deg2rad(-56.0), 0.0, 0.0, 0.0, "AB +/-K")
+const AB_K = ParamSet(
+    ParamRef(material = :MoTe2, a0 = A0_MOTE2, theta_deg = THETA_DEG,
+             stacking = :AB, valley = :K, harmonics = :FH, provenance = FITTED,
+             source = "PRB 109, 205121 (2024), Table II; fit to the DFT bands at " *
+                      "theta = 3.89 deg"),
+    KParams(mstar = 0.62, V = 53.0, psi = deg2rad(-56.0), w = 0.0,
+            V2 = 0.0, w2 = 0.0, label = "AB +/-K"))
 
 # -----------------------------------------------------------------------------
 # Gamma valley: (B32)-(B38) for AA and (C11)-(C18) for AB
 # -----------------------------------------------------------------------------
-struct GammaParams
+struct GammaParams <: AbstractParams
     mstar::Float64     # m_Gamma* (m_e)
     V::Float64         # V_Gamma
     psi::Float64       # psi_Gamma (radians)
@@ -48,6 +198,9 @@ struct GammaParams
     E0::Float64        # E_Gamma: free bias, NOT tabulated (see note below)
     label::String
 end
+
+GammaParams(; mstar, V, psi, w, E0 = 0.0, label = "") =
+    GammaParams(float(mstar), float(V), float(psi), float(w), float(E0), label)
 
 """
 Table II -- AB stacking, Gamma valley.
@@ -72,7 +225,16 @@ and scripts/03_selftest.jl asserts the resulting position.  At psi_Gamma = 0
 only the *offset* depends on E0, never the band structure or the 54.9 meV
 splitting of the two flat bands.
 """
-const AB_GAMMA = GammaParams(10.0, 72.0, 0.0, 300.0, -640.1296, "AB Gamma")
+const AB_GAMMA = ParamSet(
+    ParamRef(material = :MoTe2, a0 = A0_MOTE2, theta_deg = THETA_DEG,
+             stacking = :AB, valley = :Gamma, harmonics = :none,
+             provenance = CALIBRATED,
+             source = "PRB 109, 205121 (2024), Table II for m_Gamma*, V_Gamma and " *
+                      "w_Gamma; E_Gamma is not tabulated anywhere and is calibrated " *
+                      "here by the Fig. 4(c) '30 meV below the +-K VBM' rule",
+             calibrated_at = (A0_MOTE2, THETA_DEG)),
+    GammaParams(mstar = 10.0, V = 72.0, psi = 0.0, w = 300.0, E0 = -640.1296,
+                label = "AB Gamma"))
 
 """
 AA stacking, Gamma valley.
@@ -90,7 +252,107 @@ qualitative statement for this stacking -- the Gamma valley is out of the
 plotted window, below the 6th valence band -- i.e. 160 meV under the +-K
 valence band maximum.  That number is a placeholder, not a fit.
 """
-const AA_GAMMA = GammaParams(10.0, 72.0, 0.0, 300.0, -817.3836, "AA Gamma (unfitted)")
+const AA_GAMMA = ParamSet(
+    ParamRef(material = :MoTe2, a0 = A0_MOTE2, theta_deg = THETA_DEG,
+             stacking = :AA, valley = :Gamma, harmonics = :none,
+             provenance = PLACEHOLDER,
+             source = "no fit exists in PRB 109, 205121 (2024) -- App. B 3 fits the " *
+                      "+-K model alone.  The AB values are reused (at psi_Gamma = 0 " *
+                      "the AA and AB potentials coincide) and E_Gamma is a placeholder"),
+    GammaParams(mstar = 10.0, V = 72.0, psi = 0.0, w = 300.0, E0 = -817.3836,
+                label = "AA Gamma (unfitted)"))
+
+# -----------------------------------------------------------------------------
+# the paper's fits, indexed by (stacking, valley, harmonics)
+# -----------------------------------------------------------------------------
+"""
+    PAPER_FITS
+
+Lookup index of the recorded fits, derived from the constants above -- a table,
+not a second source of truth.  Keys are `(stacking, valley, harmonics)`.
+"""
+const PAPER_FITS = Dict{Tuple{Symbol,Symbol,Symbol},ParamSet}(
+    (:AA, :K,     :FH)   => AA_K_FH,
+    (:AA, :K,     :FHSH) => AA_K_FHSH,
+    (:AB, :K,     :FH)   => AB_K,
+    (:AA, :Gamma, :none) => AA_GAMMA,
+    (:AB, :Gamma, :none) => AB_GAMMA)
+
+"""
+    paper_fit(stacking, valley, harmonics = :none) -> ParamSet
+
+Recorded fit, e.g. `paper_fit(:AB, :Gamma)`.  Throws, listing the available keys,
+if there is no such fit.
+"""
+function paper_fit(stacking::Symbol, valley::Symbol, harmonics::Symbol = :none)
+    key = (stacking, valley, harmonics)
+    haskey(PAPER_FITS, key) ||
+        error("no recorded fit for $key; available: " *
+              join(string.(sort(collect(keys(PAPER_FITS)))), ", "))
+    return PAPER_FITS[key]
+end
+
+# -----------------------------------------------------------------------------
+# validity guard: a parameter set meets a geometry only where it was fitted
+# -----------------------------------------------------------------------------
+const ENFORCE_PARAM_CHECK = Ref(true)
+
+"""
+    enforce_param_checks!(flag::Bool)
+
+Session-wide switch for `check_parameters` (on by default).  Prefer the
+per-record `exploratory(ps)`, which says the same thing locally.
+"""
+enforce_param_checks!(flag::Bool) = (ENFORCE_PARAM_CHECK[] = flag)
+
+"""which (stacking, valley) each model symbol stands for"""
+const MODEL_REF = Dict(:AA_K => (:AA, :K), :AB_K => (:AB, :K),
+                       :AA_Gamma => (:AA, :Gamma), :AB_Gamma => (:AB, :Gamma))
+
+"""
+    check_parameters(geo, p; model = nothing, atol_a0 = 1e-4, atol_theta_deg = 1e-4)
+
+Throw if parameter set `p` is used at a geometry it was not fitted at, or with a
+Hamiltonian it does not belong to.
+
+Table I / Table II are fits to the DFT bands at theta = 3.89 deg for MoTe2 -- the
+DFT top valence bandwidth moves from 12.8 meV at 3.89 deg to 133.3 meV at 9.43 deg
+(Table V) -- so a mismatch is a physics error, not a rounding question.  It is
+silent otherwise: the bands still come out smooth and plausible.
+
+A record that makes no claim (`a0` or `theta_deg` NaN, or provenance
+`EXPLORATORY`) is skipped, so hand-built parameter sets are unaffected.  To
+deliberately cross a material or angle, wrap with `exploratory(ps)`, or switch
+the guard off for the session with `enforce_param_checks!(false)`.
+"""
+function check_parameters(geo::MoireGeometry, p; model::Union{Nothing,Symbol} = nothing,
+                          atol_a0::Float64 = 1e-4, atol_theta_deg::Float64 = 1e-4)
+    ENFORCE_PARAM_CHECK[] || return true
+    ref = paramref(p)
+    (isfinite(ref.a0) && isfinite(ref.theta_deg) && ref.provenance !== EXPLORATORY) ||
+        return true
+
+    theta_deg = rad2deg(geo.theta)
+    if !isapprox(geo.a0, ref.a0; atol = atol_a0)
+        error("parameter set '$(label(p))' is valid at a0 = $(ref.a0) Ang " *
+              "($(ref.material)), but the geometry has a0 = $(geo.a0) Ang.  " *
+              "Build the geometry from the matching Material, or wrap the parameters " *
+              "in exploratory(ps) if the mismatch is intended.")
+    end
+    if !isapprox(theta_deg, ref.theta_deg; atol = atol_theta_deg)
+        error("parameter set '$(label(p))' is valid at theta = $(ref.theta_deg) deg, " *
+              "but the geometry is at theta = $(theta_deg) deg.  The tabulated fits " *
+              "are all made at a single angle; refit for this angle, or wrap the " *
+              "parameters in exploratory(ps) if the mismatch is intended.")
+    end
+    if model !== nothing && haskey(MODEL_REF, model)
+        st, va = MODEL_REF[model]
+        (ref.stacking === st && ref.valley === va) ||
+            error("parameter set '$(label(p))' is for $(ref.stacking)/$(ref.valley) " *
+                  "but model = $(model) is $(st)/$(va).")
+    end
+    return true
+end
 
 # -----------------------------------------------------------------------------
 # derived scales
@@ -147,6 +409,11 @@ scripts/03_selftest.jl.
 """
 anharmonic_shift(geo::MoireGeometry, p::GammaParams) =
     -kinetic_prefactor(p.mstar) * norm(geo.bM1)^2 / 4
+
+# the public API passes a ParamSet; unwrap to the payload for the formulas above
+hbar_omega(geo::MoireGeometry, ps::ParamSet) = hbar_omega(geo, payload(ps))
+harmonic_stiffness(geo::MoireGeometry, ps::ParamSet) = harmonic_stiffness(geo, payload(ps))
+anharmonic_shift(geo::MoireGeometry, ps::ParamSet) = anharmonic_shift(geo, payload(ps))
 
 # -----------------------------------------------------------------------------
 # layer-sign conventions -- the paper uses OPPOSITE labels in App. B and App. C

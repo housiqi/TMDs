@@ -212,6 +212,21 @@ transfer, diagonal in spin.  Returns the single component.
 """
 gamma_interlayer(p::GammaParams) = [FourTerm([0.0, 0.0], p.w)]
 
+# The public API passes a ParamSet; these thin methods unwrap it so that the
+# constructors above only ever see a bare payload.
+aa_k_intralayer(geo::MoireGeometry, ps::ParamSet, sigma::Int; kw...) =
+    aa_k_intralayer(geo, payload(ps), sigma; kw...)
+aa_k_interlayer(geo::MoireGeometry, ps::ParamSet, eta::Int) =
+    aa_k_interlayer(geo, payload(ps), eta)
+ab_k_intralayer(geo::MoireGeometry, ps::ParamSet; kw...) =
+    ab_k_intralayer(geo, payload(ps); kw...)
+ab_k_interlayer(geo::MoireGeometry, ps::ParamSet) = ab_k_interlayer(geo, payload(ps))
+aa_gamma_intralayer(geo::MoireGeometry, ps::ParamSet, gl::Int; kw...) =
+    aa_gamma_intralayer(geo, payload(ps), gl; kw...)
+ab_gamma_intralayer(geo::MoireGeometry, ps::ParamSet; kw...) =
+    ab_gamma_intralayer(geo, payload(ps); kw...)
+gamma_interlayer(ps::ParamSet) = gamma_interlayer(payload(ps))
+
 # -----------------------------------------------------------------------------
 # integer key increments
 # -----------------------------------------------------------------------------

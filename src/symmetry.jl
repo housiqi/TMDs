@@ -370,7 +370,7 @@ function symmetry_report(geo::MoireGeometry; eps::Real = 0.0, kgen = [0.0173, -0
                   :AA_Gamma => "AA-Γ", :AB_Gamma => "AB-Γ")
 
     for (model, prm) in specs
-        ptag = model === :AA_K ? " ($(prm.label))" : ""
+        ptag = model === :AA_K ? " ($(label(prm)))" : ""
         bas = build_basis(geo, model)
         tag = labels[model] * ptag
         ketas = model in (:AA_K, :AB_K) ? (1, -1) : (1,)

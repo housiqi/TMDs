@@ -81,25 +81,44 @@ end
 with_E0(p::GammaParams, E0::Real) = GammaParams(p.mstar, p.V, p.psi, p.w,
                                                 float(E0), p.label)
 
+"""same, keeping the provenance record the payload came with"""
+with_E0(ps::ParamSet, E0::Real) = ParamSet(ps.ref, with_E0(payload(ps), E0))
+
 """
     E0_relative_to_vbm(geo, p_gamma, p_K; model_gamma = :AB_Gamma,
                        model_K = :AB_K, target = -30.0, path = <Fig. 4 route>)
-        -> GammaParams
+        -> ParamSet
 
 `E_Gamma` of (C19) is not tabulated anywhere in the paper -- it is the rigid
 offset between the inactive Gamma valley and the active +-K valleys (App. B 3),
 fixed in practice by requiring the first ultra-flat Gamma band to lie `target`
 meV below the +-K valence band maximum.  Returns `p_gamma` with the `E0` that
-does exactly that, at whatever twist angle `geo` describes.  The default
-`target = -30` is the paper's Fig. 4(c) statement for AB stacking.
+does exactly that.  The default `target = -30` is the paper's Fig. 4(c)
+statement for AB stacking.
+
+The result is only meaningful at the geometry it was calibrated at, so its
+provenance record is re-stamped with `geo`'s (a0, theta) and `CALIBRATED`, and
+`check_parameters` will stop it from being carried to another geometry.  Both
+`p_gamma` and `p_K` must themselves be valid at `geo` -- the paper's V, w and m*
+are single-angle fits, so calibrating at a new angle first needs a refit (or an
+explicit `exploratory`).
 """
-function E0_relative_to_vbm(geo::MoireGeometry, p_gamma::GammaParams, p_K;
+function E0_relative_to_vbm(geo::MoireGeometry, p_gamma::ParamSet, p_K;
                             model_gamma::Symbol = :AB_Gamma, model_K::Symbol = :AB_K,
                             target::Real = -30.0,
                             path::KPath = bz_path(geo, [[0.0, 0.0], geo.K_M, geo.Mp_M, [0.0, 0.0]];
                                                   nseg = [40, 20, 40]))
     # the Gamma Hamiltonian is linear in E0, so one probe at E0 = 0 fixes it
     probe = with_E0(p_gamma, 0.0)
-    return with_E0(p_gamma, vbm(geo, model_K, p_K; path = path) + target -
-                           vbm(geo, model_gamma, probe; path = path))
+    E0 = vbm(geo, model_K, p_K; path = path) + target -
+         vbm(geo, model_gamma, probe; path = path)
+    out = with_E0(p_gamma, E0)
+    ref = paramref(p_gamma)
+    a0, theta_deg = geo.a0, rad2deg(geo.theta)
+    return ParamSet(ParamRef(material = ref.material, a0 = a0, theta_deg = theta_deg,
+                             stacking = ref.stacking, valley = ref.valley,
+                             harmonics = ref.harmonics, provenance = CALIBRATED,
+                             source = ref.source * "; E_Gamma calibrated here by the " *
+                                      "'$(target) meV below the +-K VBM' rule",
+                             calibrated_at = (a0, theta_deg)), out.params)
 end

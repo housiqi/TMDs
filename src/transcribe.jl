@@ -30,9 +30,15 @@ Direct transcription of the printed momentum-space Hamiltonian.  Returns a
 matrix with the *same* shape as `hamiltonian(...)` for the same arguments, so
 that the two can be compared element by element: the ``+/-K`` models have no
 spin index, while the Gamma models are promoted with `gamma_with_spin`.
+
+Takes a `ParamSet` (or a bare payload) and applies the same `check_parameters`
+guard as `hamiltonian` -- it does not route through `hamiltonian`, so it needs
+its own.
 """
 function transcribe_hamiltonian(geo::MoireGeometry, bas, p, model::Symbol, k;
                                 eta::Int = 1, eps::Real = 0.0)
+    check_parameters(geo, p; model = model)
+    p = payload(p)
     if model === :AA_K
         return transcribe_AA_K(geo, bas, p, k; eta = eta, eps = eps)
     elseif model === :AB_K

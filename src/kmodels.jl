@@ -221,6 +221,17 @@ end
 """promote a spinless Gamma Hamiltonian to the full (layer, spin) space"""
 gamma_with_spin(H::AbstractMatrix) = kron(H, Matrix{ComplexF64}(I, 2, 2))
 
+# The public API passes a ParamSet; the kernels above take a bare payload so that
+# they keep dispatching on its concrete type.  Unwrap here.
+ham_AA_K(geo::MoireGeometry, bas::KValleyBasis, ps::ParamSet, k; kw...) =
+    ham_AA_K(geo, bas, payload(ps), k; kw...)
+ham_AB_K(geo::MoireGeometry, bas::KValleyBasis, ps::ParamSet, k; kw...) =
+    ham_AB_K(geo, bas, payload(ps), k; kw...)
+ham_AA_Gamma(geo::MoireGeometry, bas::GammaBasis, ps::ParamSet, k; kw...) =
+    ham_AA_Gamma(geo, bas, payload(ps), k; kw...)
+ham_AB_Gamma(geo::MoireGeometry, bas::GammaBasis, ps::ParamSet, k; kw...) =
+    ham_AB_Gamma(geo, bas, payload(ps), k; kw...)
+
 # -----------------------------------------------------------------------------
 # unified interface
 # -----------------------------------------------------------------------------
@@ -231,12 +242,19 @@ gamma_with_spin(H::AbstractMatrix) = kron(H, Matrix{ComplexF64}(I, 2, 2))
 `model` is one of `:AA_K`, `:AB_K`, `:AA_Gamma`, `:AB_Gamma`.
 The returned matrix is Hermitian; `eta` is ignored for the Gamma models (the
 Gamma valley is its own manifold).
+
+`params` is a `ParamSet` (or a bare `KParams` / `GammaParams`).  This is where a
+parameter set meets a geometry, so `check_parameters` runs first: a fit made at
+another material or another twist angle raises instead of quietly producing
+smooth, wrong bands.
 """
 build_basis(geo::MoireGeometry, model::Symbol) =
     model in (:AA_K, :AB_K) ? kvalley_basis(geo) : gammabasis(geo)
 
 function hamiltonian(geo::MoireGeometry, bas, p, model::Symbol, k;
                      eta::Int = 1, eps::Real = 0.0, convention::Symbol = :paper)
+    check_parameters(geo, p; model = model)
+    p = payload(p)                       # the kernels below take a bare payload
     if model === :AA_K
         return ham_AA_K(geo, bas, p, k; eta = eta, eps = eps, convention = convention)
     elseif model === :AB_K

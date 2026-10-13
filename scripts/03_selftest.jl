@@ -61,7 +61,7 @@ for (model, prm) in ((:AA_K, AA_K_FH), (:AA_K, AA_K_FHSH), (:AB_K, AB_K),
         v1 = norm(Hk - Ht)                       # the two sources, same reading
         v2 = norm(Ht - transpose(Hr))            # and the psi -> -psi reading
         @printf("  %-10s %-22s η=%+d   ‖kmodels − transcribe‖ = %9.2e   ‖transcribe − transp H‖ = %9.2e\n",
-                model, prm.label, eta, v1, v2)
+                model, label(prm), eta, v1, v2)
         push!(resid, v1, v2)
     end
 end
@@ -108,7 +108,7 @@ for (model, prm, n) in ((:AA_K, AA_K_FH, 6), (:AA_K, AA_K_FHSH, 6), (:AB_K, AB_K
         push!(dims, b isa GammaBasis ? b.n : length(b.Qs))
     end
     @printf("  %-10s %-22s  dim %3d/%3d/%3d   N=4→5: %9.3e   N=5→6: %9.3e meV\n",
-            model, prm.label, dims..., maximum(abs.(Es[1] .- Es[2])),
+            model, label(prm), dims..., maximum(abs.(Es[1] .- Es[2])),
             maximum(abs.(Es[2] .- Es[3])))
 end
 
@@ -176,8 +176,9 @@ ok_gamma = let g7 = moire_geometry(theta_deg = THETA_DEG, Nshell = 7)
     # calibration must be reproducible.
     rec = E0_relative_to_vbm(g7, AB_GAMMA, AB_K; target = -30.0)
     @printf("  E_Γ: default %10.4f meV, recomputed from the VBM rule %10.4f meV (Δ = %.1e)\n",
-            AB_GAMMA.E0, rec.E0, abs(rec.E0 - AB_GAMMA.E0))
-    good &= abs(rec.E0 - AB_GAMMA.E0) < 0.05
+            payload(AB_GAMMA).E0, payload(rec).E0,
+            abs(payload(rec).E0 - payload(AB_GAMMA).E0))
+    good &= abs(payload(rec).E0 - payload(AB_GAMMA).E0) < 0.05
     good
 end
 ok &= ok_gamma
@@ -192,6 +193,158 @@ for (name, kk) in (("Γ_M", [0.0, 0.0]), ("K_M", geo5.K_M), ("M_M", geo5.Mp_M))
     @printf("  %-4s E4..E1 = %8.3f %8.3f %8.3f %8.3f\n", name,
             E[end-3], E[end-2], E[end-1], E[end])
 end
+
+# =============================================================================
+# Part G: the parameter bookkeeping (ParamSet / ParamRef / provenance guard)
+#
+# All of Parts A-F above are the *physics*; this part is the *record keeping*
+# around it.  It has two jobs.
+#
+#   (1) Fence: every number that used to be a bare literal is still that exact
+#       number, and the whole band structure is bit-for-bit unchanged.  The
+#       provenance metadata must be physically inert -- if this section moves a
+#       checksum, the refactor changed the model, not just the paperwork.
+#
+#   (2) Guard: Table I / Table II are fits made at ONE material and ONE twist
+#       angle (PRB 109, 205121 (2024), theta = 3.89 deg, MoTe2).  Using them
+#       elsewhere produces smooth, plausible, wrong bands, so `check_parameters`
+#       must throw -- and each of the two escape hatches must work, because
+#       crossing a boundary on purpose is legitimate.
+# =============================================================================
+println()
+println("Part G: parameter records, provenance guard, and the refactor's inertness")
+ok_g = let
+    g = true
+
+# --- G1. the fitted numbers are bit-identical to the pre-ParamSet literals ----
+frozen = [
+    (AA_K_FH,      KParams,   (0.60, 16.5, deg2rad(-105.9), -18.8,  0.0,   0.0)),
+    (AA_K_FHSH,    KParams,   (0.62,  7.94, deg2rad(-88.43), -10.77, 20.00, 10.21)),
+    (AB_K,         KParams,   (0.62, 53.0, deg2rad(-56.0),   0.0,   0.0,   0.0)),
+    (AB_GAMMA,     GammaParams, (10.0, 72.0, 0.0, 300.0, -640.1296)),
+    (AA_GAMMA,     GammaParams, (10.0, 72.0, 0.0, 300.0, -817.3836)),
+]
+for (ps, T, want) in frozen
+    got = T === KParams ?
+          (payload(ps).mstar, payload(ps).V, payload(ps).psi, payload(ps).w,
+           payload(ps).V2, payload(ps).w2) :
+          (payload(ps).mstar, payload(ps).V, payload(ps).psi, payload(ps).w,
+           payload(ps).E0)
+    same = all(map(==, got, want))
+    @printf("  %-12s fields == frozen literals    %s\n", label(ps), same ? "yes" : "NO: $got")
+    g &= same
+end
+
+# --- G2. registry: derived from the constants, not a second source of truth ---
+reg_ok = length(PAPER_FITS) == 5
+for (key, ps) in PAPER_FITS
+    r = paramref(ps)
+    reg_ok &= (r.stacking, r.valley, r.harmonics) == key
+    reg_ok &= paper_fit(key...) === ps                 # identity, not a copy
+end
+@printf("  registry: %d keys, each ref matches its key, paper_fit returns the same object  %s\n",
+        length(PAPER_FITS), reg_ok ? "yes" : "NO")
+throws(f) = try (f(); false) catch; true end
+nofit = throws(() -> paper_fit(:AB, :K, :FHSH))        # no such fit in the paper
+@printf("  paper_fit on an absent key throws  %s\n", nofit ? "yes" : "NO")
+g &= reg_ok && nofit
+
+# --- G3. the guard fires exactly where it must -------------------------------
+# Every recorded set is valid at its own fit geometry...
+fit_geo = moire_geometry(a0 = A0_MOTE2, theta_deg = THETA_DEG)
+passes = true
+for (model, ps) in ((:AA_K, AA_K_FH), (:AA_K, AA_K_FHSH), (:AB_K, AB_K),
+                    (:AA_Gamma, AA_GAMMA), (:AB_Gamma, AB_GAMMA))
+    passes &= check_parameters(fit_geo, ps; model = model) === true
+end
+@printf("  all five sets accepted at their own fit geometry (a0 = %g, theta = %g deg)  %s\n",
+        A0_MOTE2, THETA_DEG, passes ? "yes" : "NO")
+
+# ...and nowhere else.  These three are the failure modes that matter.
+other_mat = moire_geometry(a0 = 3.282, theta_deg = THETA_DEG)   # a WSe2-like a0
+other_ang = moire_geometry(a0 = A0_MOTE2, theta_deg = 5.0)
+cases = [
+    ("material mismatch   a0 = 3.282", () -> check_parameters(other_mat, AB_GAMMA; model = :AB_Gamma)),
+    ("angle mismatch      theta = 5 deg", () -> check_parameters(other_ang, AA_K_FHSH; model = :AA_K)),
+    ("stacking/valley mismatch (AB_K at :AA_K)", () -> check_parameters(fit_geo, AB_K; model = :AA_K)),
+]
+for (what, f) in cases
+    fired = throws(f)
+    @printf("  %-42s throws  %s\n", what, fired ? "yes" : "NO")
+    g &= fired
+end
+
+# --- G4. the two escape hatches, and that they are reversible ---------------
+esc1 = check_parameters(other_ang, exploratory(AA_K_FHSH); model = :AA_K) === true
+enforce_param_checks!(false)
+esc2 = check_parameters(other_ang, AA_K_FHSH; model = :AA_K) === true
+enforce_param_checks!(true)
+restored = throws(() -> check_parameters(other_ang, AA_K_FHSH; model = :AA_K))
+@printf("  escape hatches: exploratory(ps) %s, enforce_param_checks!(false) %s, restored %s\n",
+        esc1 ? "ok" : "NO", esc2 ? "ok" : "NO", restored ? "ok" : "NO")
+g &= esc1 && esc2 && restored
+
+# the provenance survives the escape hatch: same payload, claim withdrawn
+esc_ok = payload(exploratory(AA_K_FHSH)) === payload(AA_K_FHSH) &&
+         paramref(exploratory(AA_K_FHSH)).provenance === EXPLORATORY &&
+         paramref(AA_K_FHSH).provenance === FITTED
+@printf("  exploratory() keeps the payload and withdraws the geometry claim  %s\n",
+        esc_ok ? "yes" : "NO")
+g &= esc_ok
+
+# --- G5. Material == the raw a0, and the calibrated set re-stamps itself -----
+geo_mat = moire_geometry(MOTE2; theta_deg = THETA_DEG)
+geo_raw = moire_geometry(a0 = A0_MOTE2, theta_deg = THETA_DEG)
+mat_ok = geo_mat.a0 == geo_raw.a0 && geo_mat.aM == geo_raw.aM &&
+         geo_mat.bM1 == geo_raw.bM1 && geo_mat.q == geo_raw.q &&
+         geo_mat.K_M == geo_raw.K_M
+@printf("  moire_geometry(MOTE2) == moire_geometry(a0 = 3.52)  %s\n", mat_ok ? "yes" : "NO")
+g &= mat_ok
+
+# The calibration is a *number*, so it is only reproducible at the truncation
+# the stored value was computed with: the Gamma-valley flat band needs the
+# Nshell = 7 basis (Part E), and 0.37 meV of its energy is still missing at
+# Nshell = 5.  Note this is not a geometry mismatch -- a0 and theta, the two
+# things the guard watches, do not depend on the cutoff.
+geo7 = moire_geometry(MOTE2; theta_deg = THETA_DEG, Nshell = 7)
+rec = E0_relative_to_vbm(geo7, AB_GAMMA, AB_K; target = -30.0)
+rec5 = E0_relative_to_vbm(geo_mat, AB_GAMMA, AB_K; target = -30.0)
+rec_ref = paramref(rec)
+cal_ok = rec_ref.provenance === CALIBRATED &&
+         rec_ref.calibrated_at == (geo7.a0, rad2deg(geo7.theta)) &&
+         abs(payload(rec).E0 - (-640.1296)) < 0.05
+@printf("  E0_relative_to_vbm: provenance %s, calibrated_at == (a0, theta) of the geometry %s, E_Γ = %.4f meV (Nshell = 5: %.4f)  %s\n",
+        rec_ref.provenance, rec_ref.calibrated_at == (geo7.a0, rad2deg(geo7.theta)) ? "yes" : "NO",
+        payload(rec).E0, payload(rec5).E0, cal_ok ? "ok" : "NO")
+g &= cal_ok
+# and the re-stamped record is refused at any other angle
+cal_guard = throws(() -> check_parameters(other_ang, rec; model = :AB_Gamma))
+@printf("  ... and that calibrated record is refused at theta = 5 deg  %s\n",
+        cal_guard ? "yes" : "NO")
+g &= cal_guard
+
+# --- G6. the reference fence: the bands themselves did not move --------------
+# `ref` is metadata; it must not touch a single floating-point operation.
+baseline = [(:AB_K, AB_K, 4.26562296284693778e+07),
+            (:AA_K, AA_K_FH, 4.40515890905550867e+07),
+            (:AA_K, AA_K_FHSH, 4.26288541207873896e+07)]
+for (model, ps, want) in baseline
+    got = sum(abs, diagonalize_path(fit_geo, model, ps).energies)
+    same = isapprox(got, want; rtol = 1e-12)
+    @printf("  Σ|E| along ΓKMΓ  %-10s %-18s %.17e  %s\n", model, label(ps), got,
+            same ? "unchanged" : "MOVED (frozen: $(want))")
+    g &= same
+end
+vbm_now = vbm(fit_geo, :AB_K, AB_K)
+vbm_ok = isapprox(vbm_now, 6.60526527534205883e+01; rtol = 1e-12)
+@printf("  vbm(:AB_K) %.17e  %s\n", vbm_now, vbm_ok ? "unchanged" : "MOVED")
+g &= vbm_ok
+g &= isapprox(hbar_omega(fit_geo, AB_GAMMA), 5.67614326631262074e+01; rtol = 1e-12)
+g &= isapprox(anharmonic_shift(fit_geo, AB_GAMMA), -1.86450245252928859e+00; rtol = 1e-12)
+
+    g
+end
+ok &= ok_g
 
 println()
 if ok

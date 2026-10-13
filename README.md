@@ -50,7 +50,8 @@ E   = diagonalize_point(geo, bas, AB_GAMMA, :AB_Gamma, geo.K_M)
 Project.toml                 deps: LinearAlgebra, Printf, Plots
 src/MoireTMD.jl              module entry point
 src/geometry.jl              a_0, θ → a_M, b_{M,i}, g_i, g_{2i}, q_i, q_{2i}, Q sets, k-path
-src/parameters.jl            parameter structs + Table I / Table II constants
+src/parameters.jl            ParamSet / ParamRef records, Table I / Table II constants,
+                             the paper_fit registry, and the geometry-validity guard
 src/potentials.jl            analytic Fourier components of (B21)/(B38)/(C4)/(C13)
 src/kmodels.jl               assembles h_QQ'(k): AA-K / AB-K / AA-Γ / AB-Γ
 src/transcribe.jl            verbatim transcription of the printed (B27)/(C8)/(C18)
@@ -106,15 +107,63 @@ and `‖H_paper − transpose(H_transposed)‖ = 0` exactly for every parameter 
 
 ---
 
-## Parameters, and the two places where the paper is silent
+## Parameters: the fits, where they are valid, and the two places where the paper is silent
 
-| model | parameters | source |
-|---|---|---|
-| `AA_K_FH`   | m\* = 0.60, V = 16.5, ψ = −105.9°, w = −18.8 | Table I |
-| `AA_K_FHSH` | m\* = 0.62, V = 7.94, ψ = −88.43°, w = −10.77, V₂ = 20.00, w₂ = 10.21 | Table I |
-| `AB_K`      | m\* = 0.62, V = 53, ψ = −56°, w = 0 | Table II |
-| `AB_GAMMA`  | m_Γ\* = 10, V_Γ = 72, ψ_Γ = 0°, w_Γ = 300 | Table II |
-| `AA_GAMMA`  | *(no fitted values exist — see below)* | — |
+Table I and Table II are **fits to the DFT bands at one material and one twist
+angle** — θ = 3.89°, MoTe₂ — and that is not a footnote.  The paper's own Table V
+puts the DFT top-valence bandwidth at 12.8 meV at 3.89° and 133.3 meV at 9.43°,
+and the FH+SH second harmonics V₂, w₂ are exactly the terms that stand in for the
+lattice relaxation responsible for that growth.  So a fitted set carried to
+another angle yields smooth, plausible, wrong bands.  The geometry side of this
+package has no such restriction — `moire_geometry` takes `a0` and `theta_deg` as
+pure inputs — which means the mismatch used to pass silently.  It no longer does.
+
+Each set is a `ParamSet`: a physics payload (`KParams` / `GammaParams`) wrapped
+with a `ParamRef` recording where the numbers came from and which geometry they
+are valid at.
+
+| set | parameters | provenance | valid at |
+|---|---|---|---|
+| `AA_K_FH`   | m\* = 0.60, V = 16.5, ψ = −105.9°, w = −18.8 | FITTED, Table I | MoTe₂, 3.89° |
+| `AA_K_FHSH` | m\* = 0.62, V = 7.94, ψ = −88.43°, w = −10.77, V₂ = 20.00, w₂ = 10.21 | FITTED, Table I | MoTe₂, 3.89° |
+| `AB_K`      | m\* = 0.62, V = 53, ψ = −56°, w = 0 | FITTED, Table II | MoTe₂, 3.89° |
+| `AB_GAMMA`  | m_Γ\* = 10, V_Γ = 72, ψ_Γ = 0°, w_Γ = 300, E_Γ = −640.13 | CALIBRATED — Table II except E_Γ, see below | MoTe₂, 3.89° |
+| `AA_GAMMA`  | *(no fitted values exist — see below)* | PLACEHOLDER | MoTe₂, 3.89° |
+
+```julia
+p   = paper_fit(:AA, :K, :FHSH)          # == AA_K_FHSH; keys are (stacking, valley, harmonics)
+geo = moire_geometry(MOTE2; theta_deg = 3.89)
+check_parameters(geo, p; model = :AA_K)  # throws if p is not valid at this geometry
+E   = diagonalize_point(geo, build_basis(geo, :AA_K), p, :AA_K, [0.0, 0.0])
+```
+
+`check_parameters` also runs by itself at the top of `hamiltonian` and
+`transcribe_hamiltonian` — the two points where a parameter set meets a geometry
+— and raises if `a0`, `theta_deg`, or the stacking/valley the set was fitted for
+disagrees with what is being computed (`03_selftest.jl` Part G asserts each of
+those three failures).  Two escape hatches exist for when crossing the boundary
+is deliberate:
+
+* `exploratory(ps)` — the same payload with the geometry claim withdrawn, per
+  record;
+* `enforce_param_checks!(false)` — the same thing session-wide.
+
+A record that makes no claim (`a0` or `theta_deg` = `NaN`, or provenance
+`EXPLORATORY`) is skipped, so a hand-built `KParams` / `GammaParams` is
+unconstrained by default.
+
+**Adding a material** — WSe₂, say — is a `Material` for `a0` plus one `ParamSet`
+per model carrying *its own* V, ψ, w, … from whatever source you are using; there
+is no registry to edit.  PRB 109, 205121 (2024) fits MoTe₂ only, so nothing here
+carries over except the geometry.
+
+**Why these stay `const`.**  For an immutable record that is idiomatic and does
+not restrict generality: any number of further `ParamSet`s can be defined
+alongside them, and `const` only forbids rebinding the same *name*.  Dropping it
+would be worse — a non-`const` global binding is typed `Any` at every use site.
+What actually stood in the way of other materials and angles was not `const` but
+the literals `3.52` and `3.89` sitting inside signature defaults, and those are
+now `A0_DEFAULT` / `THETA_DEFAULT_DEG`.
 
 **1. AA Γ valley has no fitted parameters at all.**  App. B 3 states that the
 fits used the ±K-valley model alone, because for θ ≤ 5.09° the Γ-valley valence
@@ -134,7 +183,12 @@ Fig. 4(c) caption) that the first ultra-flat Γ band lies 30 meV below the ±K
 valence band maximum.  `E0_relative_to_vbm` (in `bands.jl`) recomputes it,
 `03_selftest.jl` Part E checks that the tabulated number is reproduced to 3×10⁻⁴
 meV, and since the Hamiltonian is linear in `E_Γ` only the *position* depends on
-it — never the band structure or the flat-band splitting.
+it — never the band structure or the flat-band splitting.  (The recomputation is
+only reproducible at the truncation the stored value was made with: the Γ flat
+band itself still moves 0.37 meV between Nshell = 5 and 7, so at Nshell = 5 the
+rule returns −639.76 rather than −640.13.  That is a cutoff effect, not a
+geometry one — `a0` and θ, the two things the guard compares, do not depend on
+the cutoff.)
 
 For AA stacking the same rule would put the Γ valley *inside* the Fig. 4(a)/(b)
 window, contradicting the paper's statement that it lies below the 6th valence
@@ -199,6 +253,14 @@ by ≤ 3×10⁻⁵ meV (AA FH 9×10⁻¹², FH+SH 6×10⁻⁸, AB 1×10⁻¹⁰)
 `ħω` from (C25) reproduces the paper's 56.76 meV to 0.0014 meV.
 
 **D. The Γ-valley flat bands vs App. C 3.**  See the next section.
+
+**E. The parameter records and the validity guard** (Part G of the self-test,
+which runs after A–F).  It freezes every fitted number and the whole band
+structure — three Σ|E| checksums along Γ_M–K_M–M_M–Γ_M, the ±K valence band
+maximum, ħω, the anharmonic shift — and asserts they are *bit-identical* to the
+values from before the `ParamSet` refactor, because provenance metadata has to be
+physically inert.  It then exercises the registry, each of the three mismatch
+failures, both escape hatches, and the re-stamping of the `E_Γ` calibration.
 
 The figures are a product, not a criterion.
 
