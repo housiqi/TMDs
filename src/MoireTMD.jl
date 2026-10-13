@@ -30,7 +30,7 @@ include("bands.jl")
 
 export MoireGeometry, moire_geometry, check_geometry, lattice_coeffs, is_lattice_vec,
        KValleyBasis, kvalley_basis, GammaValleyBasis, gammavalley_basis,
-       GammaBasis, gammabasis, KPath, bz_path,
+       GammaBasis, gammabasis, KPath, bz_path, path_lengths,
        KParams, GammaParams, AbstractParams, ParamSet, ParamRef, Provenance,
        FITTED, CALIBRATED, PLACEHOLDER, EXPLORATORY,
        payload, paramref, label, exploratory,
@@ -43,8 +43,7 @@ export MoireGeometry, moire_geometry, check_geometry, lattice_coeffs, is_lattice
        build_basis, hamiltonian, ishermitian_exact,
        ham_AA_K, ham_AB_K, ham_AA_Gamma, ham_AB_Gamma,
        transcribe_hamiltonian,
-       BandData, diagonalize_path, diagonalize_point, top_bands, rigid_shift!, shifted,
-       vbm, with_E0, E0_relative_to_vbm,
+       diagonalize_point, valence_bands, vbm, E0_relative_to_vbm,
        CheckResult, symmetry_report, print_report, basis_perm, c3_rep, gidx,
        top_multiplets, c3_perm_spinless, key_family,
        c3_key, c3_key_inv, inv_key, c2x_key, pair_degeneracy, pair_gap,

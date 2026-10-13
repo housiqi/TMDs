@@ -56,11 +56,12 @@ src/potentials.jl            analytic Fourier components of (B21)/(B38)/(C4)/(C1
 src/kmodels.jl               assembles h_QQ'(k): AA-K / AB-K / AA-Γ / AB-Γ
 src/transcribe.jl            verbatim transcription of the printed (B27)/(C8)/(C18)
 src/symmetry.jl              every symmetry operator as an explicit basis matrix, + the suite
-src/bands.jl                 diagonalize_path → BandData, and the E_Γ calibration rule
+src/bands.jl                 diagonalize_point, vbm, and the E_Γ calibration rule
 scripts/01_bands_AA.jl       Fig. 4(a)/(b)
 scripts/02_bands_AB.jl       Fig. 4(c) + Γ-valley zoom
 scripts/03_selftest.jl       the whole self-test
-scripts/plot_common.jl       shared plotting helpers
+scripts/01,02 draw their own panels: the Fig. 4 route and colours are written
+                             out in each script, not in src/ -- they belong to the figure
 ```
 
 The two pre-existing example scripts in this repository

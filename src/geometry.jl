@@ -351,3 +351,21 @@ function bz_path(geo::MoireGeometry, points::AbstractVector{<:AbstractVector};
     pushfirst!(nodes, 1)                          # points[1] is kpts[1]
     return KPath(kpts, nodes)
 end
+
+"""
+    path_lengths(kpts) -> Vector{Float64}
+    path_lengths(path::KPath; kw...)
+
+Cumulative `|dk|` along the k-list, starting at 0: the abscissa to plot a band
+structure against.  It is a property of the sampling, not of any model, so it
+lives next to `bz_path` rather than in the plotting code.
+"""
+function path_lengths(kpts::AbstractVector{<:AbstractVector})
+    d = zeros(length(kpts))
+    for i in 2:length(kpts)
+        d[i] = d[i-1] + norm(kpts[i] .- kpts[i-1])
+    end
+    return d
+end
+
+path_lengths(path::KPath) = path_lengths(path.kpts)

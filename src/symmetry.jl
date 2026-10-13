@@ -673,8 +673,8 @@ function symmetry_report(geo::MoireGeometry; eps::Real = 0.0, kgen = [0.0173, -0
                 # under the +-K valence band maximum (Sec. III.C, Fig. 4(c)).
                 let path = bz_path(geo, [[0.0, 0.0], geo.K_M, geo.Mp_M, [0.0, 0.0]];
                                       nseg = [12, 6, 12]),
-                    pos = vbm(geo, :AB_Gamma, prm; path = path) -
-                          vbm(geo, :AB_K, AB_K; path = path)
+                    pos = vbm(geo, bas, prm, :AB_Gamma, path) -
+                          vbm(geo, build_basis(geo, :AB_K), AB_K, :AB_K, path)
                     push!(out, CheckResult("$tag: flat band sits 30 meV below the ±K VBM",
                                            abs(pos + 30), abs(pos + 30) < 8, true,
                                            "measured $(round(pos, digits = 2)) meV " *

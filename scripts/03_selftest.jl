@@ -174,7 +174,7 @@ ok_gamma = let g7 = moire_geometry(theta_deg = THETA_DEFAULT_DEG, Nshell = 7)
     # E_Γ is not tabulated anywhere; the default is *calibrated* by the paper's
     # "30 meV below the ±K valence band maximum" statement (Sec. III.C).  The
     # calibration must be reproducible.
-    rec = E0_relative_to_vbm(g7, AB_GAMMA, AB_K; target = -30.0)
+    rec = E0_relative_to_vbm(g7, AB_GAMMA, AB_K, path4; target = -30.0)
     @printf("  E_Γ: default %10.4f meV, recomputed from the VBM rule %10.4f meV (Δ = %.1e)\n",
             payload(AB_GAMMA).E0, payload(rec).E0,
             abs(payload(rec).E0 - payload(AB_GAMMA).E0))
@@ -317,8 +317,9 @@ g &= mat_ok
 # Nshell = 5.  Note this is not a geometry mismatch -- a0 and theta, the two
 # things the guard watches, do not depend on the cutoff.
 geo7 = moire_geometry(MOTE2; theta_deg = THETA_DEFAULT_DEG, Nshell = 7)
-rec = E0_relative_to_vbm(geo7, AB_GAMMA, AB_K; target = -30.0)
-rec5 = E0_relative_to_vbm(geo_mat, AB_GAMMA, AB_K; target = -30.0)
+route(g) = bz_path(g, [[0.0, 0.0], g.K_M, g.Mp_M, [0.0, 0.0]]; nseg = [40, 20, 40])
+rec = E0_relative_to_vbm(geo7, AB_GAMMA, AB_K, route(geo7); target = -30.0)
+rec5 = E0_relative_to_vbm(geo_mat, AB_GAMMA, AB_K, route(geo_mat); target = -30.0)
 rec_ref = paramref(rec)
 cal_ok = rec_ref.provenance === CALIBRATED &&
          rec_ref.calibrated_at == (geo7.a0, rad2deg(geo7.theta)) &&
@@ -338,14 +339,20 @@ g &= cal_guard
 baseline = [(:AB_K, AB_K, 4.26562296284693778e+07),
             (:AA_K, AA_K_FH, 4.40515890905550867e+07),
             (:AA_K, AA_K_FHSH, 4.26288541207873896e+07)]
+pathG = route(fit_geo)
 for (model, ps, want) in baseline
-    got = sum(abs, diagonalize_path(fit_geo, model, ps).energies)
+    # Matrix(...): sum(abs, ::Adjoint) and sum(abs, ::Matrix) take different
+    # reduction paths in Julia and disagree in the last ulp, so materialise the
+    # matrix exactly as the old BandData field type did.
+    got = sum(abs, Matrix(reduce(hcat, [diagonalize_point(fit_geo, build_basis(fit_geo, model),
+                                                          ps, model, kk)
+                                        for kk in pathG.kpts])'))
     same = isapprox(got, want; rtol = 1e-12)
     @printf("  Σ|E| along ΓKMΓ  %-10s %-18s %.17e  %s\n", model, label(ps), got,
             same ? "unchanged" : "MOVED (frozen: $(want))")
     g &= same
 end
-vbm_now = vbm(fit_geo, :AB_K, AB_K)
+vbm_now = vbm(fit_geo, build_basis(fit_geo, :AB_K), AB_K, :AB_K, pathG)
 vbm_ok = isapprox(vbm_now, 6.60526527534205883e+01; rtol = 1e-12)
 @printf("  vbm(:AB_K) %.17e  %s\n", vbm_now, vbm_ok ? "unchanged" : "MOVED")
 g &= vbm_ok

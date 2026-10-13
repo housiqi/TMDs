@@ -203,7 +203,6 @@ GammaParams(; mstar, V, psi, w, E0 = 0.0, label = "") =
 
 """
 Table II -- AB stacking, Gamma valley.
-
 `E0 = E_Gamma`.  **It is not given in any table of the paper**, and cannot be
 derived from the tables: (C19) is `h = hbar^2 grad^2/2m_Gamma* + w_Gamma +
 E_Gamma + V_Gamma(r)`, in which `E_Gamma` is a rigid shift of the whole
