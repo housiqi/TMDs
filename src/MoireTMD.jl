@@ -1,8 +1,8 @@
 """
     MoireTMD
 
-Continuum models of twisted bilayer MoTe2, following PRB **109**, 205121 (2024)
-(Jia et al., *Moire fractional Chern insulators. I*).
+Continuum models of twisted bilayer TMDs, following PRB **109**, 205121 (2024)
+(Jia et al., *Moire fractional Chern insulators...*).
 
 Four single-particle models are implemented, exactly as given in the paper:
 
@@ -13,18 +13,7 @@ Four single-particle models are implemented, exactly as given in the paper:
 | `:AA_Gamma`| AA       | Gamma  | (B28)-(B38)                        |
 | `:AB_Gamma`| AB       | Gamma  | (C11)-(C18),   Eq. (7)             |
 
-Every model is diagonalised in the plane-wave basis of (B22)/(C16),
-`|k,Q> ∝ exp(-i(k-Q).r)` -- the same route the paper takes.  There is no
-real-space diagonalisation anywhere.
-
-Example
--------
-```julia
-using MoireTMD
-geo = moire_geometry(theta_deg = 3.89, Nshell = 5)
-bas = build_basis(geo, :AA_K)
-H   = hamiltonian(geo, bas, AA_K_FHSH, :AA_K, [0.0, 0.0]; eta = 1)
-```
+Every model is diagonalised in the plane-wave basis of (B22)/(C16)
 """
 module MoireTMD
 
@@ -58,4 +47,4 @@ export MoireGeometry, moire_geometry, check_geometry, lattice_coeffs, is_lattice
        c3_key_g, c3_key_g_inv, inv_key_g, c2x_key_g, c2y_key_g,
        transcribe_AA_K, transcribe_AB_K, transcribe_AB_Gamma
 
-end # module
+end

@@ -29,8 +29,10 @@ println()
 geo = moire_geometry(theta_deg = THETA_DEG, Nshell = 5)
 @printf("a_M = %.4f Å, |b_M1| = %.6f Å⁻¹, |q1| = %.6f Å⁻¹, |K_M| = %.6f Å⁻¹\n",
         geo.aM, norm(geo.bM1), norm(geo.q[1]), norm(geo.K_M))
-@printf("path nodes: Γ_M@%d  K_M@%d  M_M@%d  Γ_M@%d  (nk = %d)\n",
-        bz_path(geo).nodes..., length(bz_path(geo).kpts))
+let path = bz_path(geo, [[0.0, 0.0], geo.K_M, geo.Mp_M, [0.0, 0.0]]; nseg = [40, 20, 40])
+    @printf("path nodes: Γ_M@%d  K_M@%d  M_M@%d  Γ_M@%d  (nk = %d)\n",
+            path.nodes..., length(path.kpts))
+end
 println()
 
 # --- Part A: symmetry / consistency identities -------------------------------
@@ -158,10 +160,11 @@ ok_gamma = let g7 = moire_geometry(theta_deg = THETA_DEG, Nshell = 7)
 
     # "Extremely flat": localized on a 3.7 Å scale, so the dispersion over the
     # 52 Å moiré cell is a small fraction of ħω.
+    path4 = bz_path(g7, [[0.0, 0.0], g7.K_M, g7.Mp_M, [0.0, 0.0]]; nseg = [40, 20, 40])
     b0 = [diagonalize_point(g7, bG, AB_GAMMA, :AB_Gamma, kk)[(end-1):end]
-          for kk in bz_path(g7).kpts]
+          for kk in path4.kpts]
     b1 = [diagonalize_point(g7, bG, AB_GAMMA, :AB_Gamma, kk)[(end-3):(end-2)]
-          for kk in bz_path(g7).kpts]
+          for kk in path4.kpts]
     bw(v) = maximum(v) - minimum(v)
     w0 = max(bw([x[1] for x in b0]), bw([x[2] for x in b0]))
     w1 = max(bw([x[1] for x in b1]), bw([x[2] for x in b1]))

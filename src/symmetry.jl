@@ -671,7 +671,8 @@ function symmetry_report(geo::MoireGeometry; eps::Real = 0.0, kgen = [0.0173, -0
                 # E_Gamma is not tabulated (App. B 3); the default in
                 # parameters.jl is calibrated so that the flat band sits 30 meV
                 # under the +-K valence band maximum (Sec. III.C, Fig. 4(c)).
-                let path = bz_path(geo; n1 = 12, n2 = 6, n3 = 12),
+                let path = bz_path(geo, [[0.0, 0.0], geo.K_M, geo.Mp_M, [0.0, 0.0]];
+                                      nseg = [12, 6, 12]),
                     pos = vbm(geo, :AB_Gamma, prm; path = path) -
                           vbm(geo, :AB_K, AB_K; path = path)
                     push!(out, CheckResult("$tag: flat band sits 30 meV below the ±K VBM",

@@ -1,5 +1,5 @@
 # =============================================================================
-# parameters.jl -- model parameters, transcribed from the paper's tables
+#   model parameters from the papers
 #
 #   Table I  : AA-stacked tMoTe2, +/-K valley, Eq. (3) / (B27)
 #   Table II : AB-stacked tMoTe2, +/-K valley Eq. (5)/(C8) and Gamma valley

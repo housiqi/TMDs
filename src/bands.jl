@@ -21,11 +21,15 @@ function diagonalize_point(geo::MoireGeometry, bas, p, model::Symbol, k;
 end
 
 """
-    diagonalize_path(geo, model, p; path = bz_path(geo), eta = 1, eps = 0.0,
+    diagonalize_path(geo, model, p; path = <Fig. 4 route>, eta = 1, eps = 0.0,
                      convention = :paper) -> BandData
+
+The default path is the paper's Fig. 4 route Γ_M -> K_M -> M_M -> Γ_M with
+40/20/40 points on the three legs; pass `path` for any other route.
 """
 function diagonalize_path(geo::MoireGeometry, model::Symbol, p;
-                          path::KPath = bz_path(geo),
+                          path::KPath = bz_path(geo, [[0.0, 0.0], geo.K_M, geo.Mp_M, [0.0, 0.0]];
+                                                nseg = [40, 20, 40]),
                           eta::Int = 1, eps::Real = 0.0,
                           convention::Symbol = :paper)
     bas = build_basis(geo, model)
@@ -64,7 +68,9 @@ function shifted(bd::BandData, e0::Real)
 end
 
 """the valence band maximum of `model` along the path (highest eigenvalue anywhere)"""
-function vbm(geo::MoireGeometry, model::Symbol, p; path::KPath = bz_path(geo),
+function vbm(geo::MoireGeometry, model::Symbol, p;
+             path::KPath = bz_path(geo, [[0.0, 0.0], geo.K_M, geo.Mp_M, [0.0, 0.0]];
+                                   nseg = [40, 20, 40]),
              eta::Int = 1, eps::Real = 0.0)
     bas = build_basis(geo, model)
     return maximum(diagonalize_point(geo, bas, p, model, k;
@@ -77,7 +83,7 @@ with_E0(p::GammaParams, E0::Real) = GammaParams(p.mstar, p.V, p.psi, p.w,
 
 """
     E0_relative_to_vbm(geo, p_gamma, p_K; model_gamma = :AB_Gamma,
-                       model_K = :AB_K, target = -30.0, path = bz_path(geo))
+                       model_K = :AB_K, target = -30.0, path = <Fig. 4 route>)
         -> GammaParams
 
 `E_Gamma` of (C19) is not tabulated anywhere in the paper -- it is the rigid
@@ -89,7 +95,9 @@ does exactly that, at whatever twist angle `geo` describes.  The default
 """
 function E0_relative_to_vbm(geo::MoireGeometry, p_gamma::GammaParams, p_K;
                             model_gamma::Symbol = :AB_Gamma, model_K::Symbol = :AB_K,
-                            target::Real = -30.0, path::KPath = bz_path(geo))
+                            target::Real = -30.0,
+                            path::KPath = bz_path(geo, [[0.0, 0.0], geo.K_M, geo.Mp_M, [0.0, 0.0]];
+                                                  nseg = [40, 20, 40]))
     # the Gamma Hamiltonian is linear in E0, so one probe at E0 = 0 fixes it
     probe = with_E0(p_gamma, 0.0)
     return with_E0(p_gamma, vbm(geo, model_K, p_K; path = path) + target -

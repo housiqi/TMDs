@@ -1,19 +1,17 @@
 # =============================================================================
-# geometry.jl -- moire geometry of twisted bilayer MoTe2
-#
+# geometry.jl -- moire geometry of twisted bilayer TMDs
 # Every formula below cites PRB 109, 205121 (2024) by equation number.
-#
+# Lengths in Angstrom, momenta in Angstrom^-1, energies in meV.
 #   (B1)   a_M   = a_0 / (2 sin(theta/2))
-#   (B2)   b_{M,1} = 4pi/(sqrt(3) a_M) (1,0)^T ,  b_{M,2} = C3 b_{M,1}
-#   (B1)   a_{M,1} = a_M (sqrt(3)/2, -1/2)^T   ,  a_{M,2} = C3 a_{M,1}
+#   (2)*   b_{M,1} = 4pi/(sqrt(3) a_M) (1,0)^T
+#   (2)*   b_{M,2} = 4pi/(sqrt(3) a_M) (1/2, sqrt(3)/2)^T
+#   (2)*   a_{M,1} = a_M (sqrt(3)/2, -1/2)^T   ,  a_{M,2} = C3 a_{M,1}
 #          g_i   = C3^{i-1} b_{M,1}                        (i = 1,2,3)
 #          g_{2,1} = b_{M,1} + b_{M,2} ,  g_{2,i} = C3^{i-1} g_{2,1}
 #   (B12)  q_1 = K_b - K_t = 4pi/(3a_0) 2 sin(theta/2) (0,1)^T
 #          q_i   = C3^{i-1} q_1
 #          q_{2,1} = b_{M,1} + q_1 ,  q_{2,i} = C3^{i-1} q_{2,1}
 #   (B23)  Q_l^eta = { G_M + eta (-1)^l q_1 }   (l = t,b <-> (-1)^l = +1,-1)
-#
-# Lengths in Angstrom, momenta in Angstrom^-1, energies in meV.
 # =============================================================================
 
 """hbar^2/(2 m_e) in meV*Angstrom^2.  = 3.80998 eV*Angstrom^2"""
@@ -100,6 +98,13 @@ function moire_geometry(; a0::Real = 3.52, theta_deg::Real = 3.89, Nshell::Int =
     push!(q2, C3op(q2[2]))
 
     # hexagonal shell of G_M
+    #
+    # Empty typed vectors are spelled two ways in this file, on a rule: a nested
+    # element type is written out (Vector{Vector{Float64}}()), a simple one uses
+    # the sugar (NTuple{2,Int}[]).  The two are the same type -- T[] is exactly
+    # Vector{T}() -- but the sugar for a *nested* element type drops a brace
+    # level (Vector{Float64}[] is Vector{Vector{Float64}}, not
+    # Vector{Vector{Float64}}()), so it is avoided for the G/Q lists.
     Gs = Vector{Vector{Float64}}()
     Gkey = NTuple{2,Int}[]
     for m1 in -Nshell:Nshell, m2 in -Nshell:Nshell
@@ -295,34 +300,43 @@ function gammavalley_basis(geo::MoireGeometry)
 end
 
 # -----------------------------------------------------------------------------
-# high-symmetry path, in the style of Fig. 4:  Gamma_M -> K_M -> M_M -> Gamma_M
+# high-symmetry paths through the moire BZ; the points are caller-supplied
 # -----------------------------------------------------------------------------
 struct KPath
     kpts::Vector{Vector{Float64}}
-    nodes::Vector{Int}          # node indices into kpts (5 entries here)
+    nodes::Vector{Int}          # indices into kpts of the high-symmetry points, in order
 end
 
 """
-    bz_path(geo; n1 = 40, n2 = 20, n3 = 40) -> KPath
+    bz_path(geo, points; nseg = fill(40, length(points) - 1)) -> KPath
 
-Piecewise-linear path Gamma_M -> K_M -> M_M -> Gamma_M with `n1`/`n2`/`n3`
-points on the three segments (shared endpoints not repeated).
+Piecewise-linear k-path visiting `points` in order.  `points` is supplied by the
+caller -- nothing about the path is fixed here, so an arbitrary high-symmetry
+route can be requested.  For the route of the paper's Fig. 4 write
+
+    bz_path(geo, [[0.0, 0.0], geo.K_M, geo.Mp_M, [0.0, 0.0]]; nseg = [40, 20, 40])
+
+`nseg[j]` is the number of k-points on segment `j` (the straight line
+`points[j] -> points[j+1]`), endpoints included; a shared endpoint is stored only
+once, so `kpts` has `sum(nseg) - (length(points) - 1)` entries.  `nodes[j]` is the
+index in `kpts` of `points[j]`, i.e. `kpts[nodes[j]] == points[j]`.
 """
-function bz_path(geo::MoireGeometry; n1::Int = 40, n2::Int = 20, n3::Int = 40)
-    G0 = [0.0, 0.0]
-    segs = (lineseg(G0, geo.K_M, n1),
-            lineseg(geo.K_M, geo.Mp_M, n2),
-            lineseg(geo.Mp_M, G0, n3))
+function bz_path(geo::MoireGeometry, points::AbstractVector{<:AbstractVector};
+                 nseg::AbstractVector{<:Integer} = fill(40, length(points) - 1))
+    @assert length(points) >= 2 "need at least two high-symmetry points"
+    @assert length(nseg) == length(points) - 1 "nseg must have one entry per segment"
+    @assert all(>(1), nseg) "each segment needs at least two points"
+
     kpts = Vector{Vector{Float64}}()
     nodes = Int[]
-    for (s, seg) in enumerate(segs)
-        push!(nodes, length(kpts) + 1)
-        for (j, p) in enumerate(seg)
-            j == 1 && s > 1 && continue      # node already appended
+    for j in 1:(length(points) - 1)
+        seg = lineseg(points[j], points[j + 1], nseg[j])
+        for (t, p) in enumerate(seg)
+            t == 1 && !isempty(kpts) && continue  # node already stored by the previous segment
             push!(kpts, p)
         end
+        push!(nodes, length(kpts))                # the segment's last point is points[j+1]
     end
-    push!(nodes, length(kpts))              # closing Gamma_M
-    nodes[1] = 1
+    pushfirst!(nodes, 1)                          # points[1] is kpts[1]
     return KPath(kpts, nodes)
 end
