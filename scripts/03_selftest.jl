@@ -23,10 +23,10 @@ const KGEN = [0.0173, -0.0091]     # a generic k, off every high-symmetry line
 
 println()
 println("Julia $(VERSION)   ", Sys.MACHINE)
-println("θ = $(THETA_DEG)°, a0 = $(A0_MOTE2) Å, Nshell = 5")
+println("θ = $(THETA_DEFAULT_DEG)°, a0 = $(A0_MOTE2) Å, Nshell = 5")
 println()
 
-geo = moire_geometry(theta_deg = THETA_DEG, Nshell = 5)
+geo = moire_geometry(theta_deg = THETA_DEFAULT_DEG, Nshell = 5)
 @printf("a_M = %.4f Å, |b_M1| = %.6f Å⁻¹, |q1| = %.6f Å⁻¹, |K_M| = %.6f Å⁻¹\n",
         geo.aM, norm(geo.bM1), norm(geo.q[1]), norm(geo.K_M))
 let path = bz_path(geo, [[0.0, 0.0], geo.K_M, geo.Mp_M, [0.0, 0.0]]; nseg = [40, 20, 40])
@@ -101,7 +101,7 @@ for (model, prm, n) in ((:AA_K, AA_K_FH, 6), (:AA_K, AA_K_FHSH, 6), (:AB_K, AB_K
     Es = Vector{Vector{Float64}}()
     dims = Int[]
     for N in (4, 5, 6)
-        g = moire_geometry(theta_deg = THETA_DEG, Nshell = N)
+        g = moire_geometry(theta_deg = THETA_DEFAULT_DEG, Nshell = N)
         b = build_basis(g, model)
         E = diagonalize_point(g, b, prm, model, [0.0, 0.0])
         push!(Es, E[(end - n + 1):end])
@@ -123,7 +123,7 @@ end
 # (parameters.jl:anharmonic_shift) that is checked numerically here.
 println()
 println("Γ-valley flat bands (AB): exact lattice vs (C24) harmonic oscillator")
-ok_gamma = let g7 = moire_geometry(theta_deg = THETA_DEG, Nshell = 7)
+ok_gamma = let g7 = moire_geometry(theta_deg = THETA_DEFAULT_DEG, Nshell = 7)
     bG = build_basis(g7, :AB_Gamma)
     Hs = ham_AB_Gamma(g7, bG, AB_GAMMA, [0.0, 0.0])         # spinless, 2 layers
     Pc3 = Matrix{Float64}(I, size(Hs, 1), size(Hs, 1))[c3_perm_spinless(bG), :]
@@ -147,7 +147,7 @@ ok_gamma = let g7 = moire_geometry(theta_deg = THETA_DEG, Nshell = 7)
     @printf("  splitting vs Nshell:")
     seq = Float64[]
     for N in (4, 5, 6, 7, 8, 9)
-        g = moire_geometry(theta_deg = THETA_DEG, Nshell = N)
+        g = moire_geometry(theta_deg = THETA_DEFAULT_DEG, Nshell = N)
         b = build_basis(g, :AB_Gamma)
         lv = top_multiplets(ham_AB_Gamma(g, b, AB_GAMMA, [0.0, 0.0]),
                             Matrix{Float64}(I, 2length(b.G.Qs), 2length(b.G.Qs))[
@@ -186,7 +186,7 @@ ok &= ok_gamma
 # --- Part F: AA ±K band structure, sanity numbers ----------------------------
 println()
 println("AA ±K (FH+SH), top valence bands at the high-symmetry points (meV)")
-geo5 = moire_geometry(theta_deg = THETA_DEG, Nshell = 5)
+geo5 = moire_geometry(theta_deg = THETA_DEFAULT_DEG, Nshell = 5)
 bas = build_basis(geo5, :AA_K)
 for (name, kk) in (("Γ_M", [0.0, 0.0]), ("K_M", geo5.K_M), ("M_M", geo5.Mp_M))
     E = diagonalize_point(geo5, bas, AA_K_FHSH, :AA_K, kk)
@@ -235,6 +235,16 @@ for (ps, T, want) in frozen
     g &= same
 end
 
+# ...and the geometry they claim must stay the paper's geometry.  The five
+# records express `a0`/`theta_deg` through the package defaults, so editing a
+# default (`geometry.jl`) would silently re-point every one of them -- and the
+# guard, whose whole job is to catch a parameters/geometry mismatch, would go
+# quiet instead of loud.  Pinning the defaults here forces a deliberate choice.
+geom_ok = A0_DEFAULT == 3.52 && THETA_DEFAULT_DEG == 3.89
+@printf("  package defaults still the paper's geometry (a0 = 3.52, theta = 3.89)  %s\n",
+        geom_ok ? "yes" : "NO -- the five records below now claim the new geometry")
+g &= geom_ok
+
 # --- G2. registry: derived from the constants, not a second source of truth ---
 reg_ok = length(PAPER_FITS) == 5
 for (key, ps) in PAPER_FITS
@@ -251,17 +261,17 @@ g &= reg_ok && nofit
 
 # --- G3. the guard fires exactly where it must -------------------------------
 # Every recorded set is valid at its own fit geometry...
-fit_geo = moire_geometry(a0 = A0_MOTE2, theta_deg = THETA_DEG)
+fit_geo = moire_geometry(a0 = A0_MOTE2, theta_deg = THETA_DEFAULT_DEG)
 passes = true
 for (model, ps) in ((:AA_K, AA_K_FH), (:AA_K, AA_K_FHSH), (:AB_K, AB_K),
                     (:AA_Gamma, AA_GAMMA), (:AB_Gamma, AB_GAMMA))
     passes &= check_parameters(fit_geo, ps; model = model) === true
 end
 @printf("  all five sets accepted at their own fit geometry (a0 = %g, theta = %g deg)  %s\n",
-        A0_MOTE2, THETA_DEG, passes ? "yes" : "NO")
+        A0_MOTE2, THETA_DEFAULT_DEG, passes ? "yes" : "NO")
 
 # ...and nowhere else.  These three are the failure modes that matter.
-other_mat = moire_geometry(a0 = 3.282, theta_deg = THETA_DEG)   # a WSe2-like a0
+other_mat = moire_geometry(a0 = 3.282, theta_deg = THETA_DEFAULT_DEG)   # a WSe2-like a0
 other_ang = moire_geometry(a0 = A0_MOTE2, theta_deg = 5.0)
 cases = [
     ("material mismatch   a0 = 3.282", () -> check_parameters(other_mat, AB_GAMMA; model = :AB_Gamma)),
@@ -293,8 +303,8 @@ esc_ok = payload(exploratory(AA_K_FHSH)) === payload(AA_K_FHSH) &&
 g &= esc_ok
 
 # --- G5. Material == the raw a0, and the calibrated set re-stamps itself -----
-geo_mat = moire_geometry(MOTE2; theta_deg = THETA_DEG)
-geo_raw = moire_geometry(a0 = A0_MOTE2, theta_deg = THETA_DEG)
+geo_mat = moire_geometry(MOTE2; theta_deg = THETA_DEFAULT_DEG)
+geo_raw = moire_geometry(a0 = A0_MOTE2, theta_deg = THETA_DEFAULT_DEG)
 mat_ok = geo_mat.a0 == geo_raw.a0 && geo_mat.aM == geo_raw.aM &&
          geo_mat.bM1 == geo_raw.bM1 && geo_mat.q == geo_raw.q &&
          geo_mat.K_M == geo_raw.K_M
@@ -306,7 +316,7 @@ g &= mat_ok
 # Nshell = 7 basis (Part E), and 0.37 meV of its energy is still missing at
 # Nshell = 5.  Note this is not a geometry mismatch -- a0 and theta, the two
 # things the guard watches, do not depend on the cutoff.
-geo7 = moire_geometry(MOTE2; theta_deg = THETA_DEG, Nshell = 7)
+geo7 = moire_geometry(MOTE2; theta_deg = THETA_DEFAULT_DEG, Nshell = 7)
 rec = E0_relative_to_vbm(geo7, AB_GAMMA, AB_K; target = -30.0)
 rec5 = E0_relative_to_vbm(geo_mat, AB_GAMMA, AB_K; target = -30.0)
 rec_ref = paramref(rec)

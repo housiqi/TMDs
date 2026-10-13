@@ -37,7 +37,7 @@ export MoireGeometry, moire_geometry, check_geometry, lattice_coeffs, is_lattice
        Material, MOTE2, A0_DEFAULT, THETA_DEFAULT_DEG,
        paper_fit, PAPER_FITS, check_parameters, enforce_param_checks!,
        AA_K_FH, AA_K_FHSH, AB_K, AB_GAMMA, AA_GAMMA,
-       A0_MOTE2, THETA_DEG, HBAR2_2ME,
+       A0_MOTE2, HBAR2_2ME,
        kinetic_prefactor, hbar_omega, harmonic_stiffness, anharmonic_shift,
        layer_sign_kvalley, layer_sign_gamma,
        build_basis, hamiltonian, ishermitian_exact,

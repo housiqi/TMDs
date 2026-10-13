@@ -58,9 +58,10 @@ end
 # Package defaults.  Nothing in this file is material-specific: `a0` and
 # `theta_deg` are pure inputs and every derived quantity follows from them.  The
 # defaults are the paper's MoTe2 / 3.89 deg so that a bare `moire_geometry()` is
-# the paper's geometry; parameters.jl re-exports the same numbers as
-# `A0_MOTE2` / `THETA_DEG` and labels the fitted parameter sets with the
-# (material, angle) they are valid at.
+# the paper's geometry.  These are the geometry side only -- which parameter sets
+# happen to be fitted at them is parameters.jl's business, and
+# scripts/03_selftest.jl pins both values so that editing one here cannot quietly
+# re-point the paper's fits.
 const A0_DEFAULT        = 3.52
 const THETA_DEFAULT_DEG = 3.89
 

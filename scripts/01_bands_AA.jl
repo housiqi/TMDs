@@ -28,7 +28,7 @@ const FIGDIR = joinpath(ROOT, "figs")
 for (tag, prmK, nbandK, title) in
         (("fig4a_AA_FH",   AA_K_FH,   2, "AA stacking, FH,   θ = 3.89°"),
          ("fig4b_AA_FHSH", AA_K_FHSH, 3, "AA stacking, FH+SH, θ = 3.89°"))
-    geo = moire_geometry(theta_deg = THETA_DEG, Nshell = NSHELL)
+    geo = moire_geometry(theta_deg = THETA_DEFAULT_DEG, Nshell = NSHELL)
     shift = vbm(geo, :AA_K, prmK)        # energy zero = ±K valence band maximum
     cK = valence_bands(geo, :AA_K, prmK; nbands = nbandK)
     cG = valence_bands(geo, :AA_Gamma, AA_GAMMA; nbands = 6)   # spinful basis

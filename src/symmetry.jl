@@ -701,7 +701,7 @@ holds.
 """
 function print_report(results::Vector{CheckResult}; io::IO = stdout)
     println(io, "="^78)
-    println(io, "  symmetry / consistency self-test    (θ = $(THETA_DEG)°, ε = 0)")
+    println(io, "  symmetry / consistency self-test    (θ = $(THETA_DEFAULT_DEG)°, ε = 0)")
     println(io, "="^78)
     @printf(io, "  %-46s %10s  %s\n", "check", "residual", "status")
     println(io, "-"^78)

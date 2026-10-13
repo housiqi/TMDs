@@ -1,9 +1,5 @@
 # =============================================================================
-#   model parameters from the papers
-#
-#   Table I  : AA-stacked tMoTe2, +/-K valley, Eq. (3) / (B27)
-#   Table II : AB-stacked tMoTe2, +/-K valley Eq. (5)/(C8) and Gamma valley
-#              Eq. (7)/(C18)
+#   model parameters from papers
 #
 # All energies in meV, masses in units of the free electron mass m_e,
 # momenta in Angstrom^-1.
@@ -88,9 +84,6 @@ end
 DFT-D2 gives 3.518.  The paper's fits use a_0 = 3.52 Ang."""
 const A0_MOTE2 = A0_DEFAULT
 
-"""the twist angle every fit in the paper is made at"""
-const THETA_DEG = THETA_DEFAULT_DEG
-
 const MOTE2 = Material(:MoTe2, A0_MOTE2, "MoTe2")
 
 """`moire_geometry(MOTE2)` == `moire_geometry(a0 = 3.52, ...)`; same for any Material."""
@@ -158,21 +151,27 @@ end
 KParams(; mstar, V, psi, w, V2 = 0.0, w2 = 0.0, label = "") =
     KParams(float(mstar), float(V), float(psi), float(w), float(V2), float(w2), label)
 
-const _TABLE_I = "PRB 109, 205121 (2024), Table I"
+# The five sets below are records of PRB 109, 205121 (2024), every one of which is
+# a single-angle fit.  Their `a0` / `theta_deg` name the geometry through the
+# package defaults (`A0_MOTE2` == `A0_DEFAULT`, `THETA_DEFAULT_DEG`), which were
+# taken from that paper -- so the two coincide today, but the records are pinned
+# to the defaults rather than to the paper.  Changing either default therefore
+# moves the geometry these five claim, and Part G of the self-test asserts both
+# defaults are still 3.52 / 3.89 so that it cannot happen unnoticed.
 
 """Table I -- AA stacking, +-K valley, first harmonics only (V2 = w2 = 0)"""
 const AA_K_FH = ParamSet(
-    ParamRef(material = :MoTe2, a0 = A0_MOTE2, theta_deg = THETA_DEG,
+    ParamRef(material = :MoTe2, a0 = A0_MOTE2, theta_deg = THETA_DEFAULT_DEG,
              stacking = :AA, valley = :K, harmonics = :FH, provenance = FITTED,
-             source = "$_TABLE_I; fit to the DFT bands at theta = 3.89 deg"),
+             source = "PRB 109, 205121 (2024), Table I; fit to the DFT bands at theta = 3.89 deg"),
     KParams(mstar = 0.60, V = 16.5, psi = deg2rad(-105.9), w = -18.8,
             V2 = 0.0, w2 = 0.0, label = "AA +/-K FH"))
 
 """Table I -- AA stacking, +-K valley, first + second harmonics"""
 const AA_K_FHSH = ParamSet(
-    ParamRef(material = :MoTe2, a0 = A0_MOTE2, theta_deg = THETA_DEG,
+    ParamRef(material = :MoTe2, a0 = A0_MOTE2, theta_deg = THETA_DEFAULT_DEG,
              stacking = :AA, valley = :K, harmonics = :FHSH, provenance = FITTED,
-             source = "$_TABLE_I; fit to the DFT bands at theta = 3.89 deg.  The " *
+             source = "PRB 109, 205121 (2024), Table I; fit to the DFT bands at theta = 3.89 deg.  The " *
                       "second harmonics stand in for lattice relaxation, which is " *
                       "what makes this set the most angle-sensitive of the five"),
     KParams(mstar = 0.62, V = 7.94, psi = deg2rad(-88.43), w = -10.77,
@@ -180,7 +179,7 @@ const AA_K_FHSH = ParamSet(
 
 """Table II -- AB stacking, +-K valley.  The AB +/-K model (C8) has no SH terms."""
 const AB_K = ParamSet(
-    ParamRef(material = :MoTe2, a0 = A0_MOTE2, theta_deg = THETA_DEG,
+    ParamRef(material = :MoTe2, a0 = A0_MOTE2, theta_deg = THETA_DEFAULT_DEG,
              stacking = :AB, valley = :K, harmonics = :FH, provenance = FITTED,
              source = "PRB 109, 205121 (2024), Table II; fit to the DFT bands at " *
                       "theta = 3.89 deg"),
@@ -226,13 +225,13 @@ only the *offset* depends on E0, never the band structure or the 54.9 meV
 splitting of the two flat bands.
 """
 const AB_GAMMA = ParamSet(
-    ParamRef(material = :MoTe2, a0 = A0_MOTE2, theta_deg = THETA_DEG,
+    ParamRef(material = :MoTe2, a0 = A0_MOTE2, theta_deg = THETA_DEFAULT_DEG,
              stacking = :AB, valley = :Gamma, harmonics = :none,
              provenance = CALIBRATED,
              source = "PRB 109, 205121 (2024), Table II for m_Gamma*, V_Gamma and " *
                       "w_Gamma; E_Gamma is not tabulated anywhere and is calibrated " *
                       "here by the Fig. 4(c) '30 meV below the +-K VBM' rule",
-             calibrated_at = (A0_MOTE2, THETA_DEG)),
+             calibrated_at = (A0_MOTE2, THETA_DEFAULT_DEG)),
     GammaParams(mstar = 10.0, V = 72.0, psi = 0.0, w = 300.0, E0 = -640.1296,
                 label = "AB Gamma"))
 
@@ -253,7 +252,7 @@ plotted window, below the 6th valence band -- i.e. 160 meV under the +-K
 valence band maximum.  That number is a placeholder, not a fit.
 """
 const AA_GAMMA = ParamSet(
-    ParamRef(material = :MoTe2, a0 = A0_MOTE2, theta_deg = THETA_DEG,
+    ParamRef(material = :MoTe2, a0 = A0_MOTE2, theta_deg = THETA_DEFAULT_DEG,
              stacking = :AA, valley = :Gamma, harmonics = :none,
              provenance = PLACEHOLDER,
              source = "no fit exists in PRB 109, 205121 (2024) -- App. B 3 fits the " *

@@ -21,7 +21,7 @@ include(joinpath(@__DIR__, "plot_common.jl"))
 const NSHELL = 7          # the Γ-valley oscillator needs Nshell ≥ 7; it is far
 const FIGDIR = joinpath(ROOT, "figs")   # more localized than the ±K states
 
-geo = moire_geometry(theta_deg = THETA_DEG, Nshell = NSHELL)
+geo = moire_geometry(theta_deg = THETA_DEFAULT_DEG, Nshell = NSHELL)
 shift = vbm(geo, :AB_K, AB_K)
 cK = valence_bands(geo, :AB_K, AB_K; nbands = 4)
 # the Γ-valley basis carries spin explicitly, so the top 6 states are the
