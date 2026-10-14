@@ -57,7 +57,8 @@ for (tag, prmK, nbandK, title, leg) in
     # backslash survives Julia's own string escaping.
     ticks = (cK.d[cK.nodes], [raw"$\Gamma_M$", raw"$K_M$", raw"$M_M$", raw"$\Gamma_M$"])
     plt = plot(; ylabel = raw"$E - E_{VBM}$  (meV)", ylim = (-80.0, 5.0), title = title,
-               titlefontsize = 10, legend = leg, legendfontsize = 8,
+               titlefontsize = 8, legend = leg, legendfontsize = 8,
+               titlelocation = (0.5, 1.02),
                size = (640, 420), xticks = ticks, framestyle = :box, grid = false,
                left_margin = 8Plots.mm)
     for (lab, col, ls, dat) in (("±K valley", C_K, :solid, cK),

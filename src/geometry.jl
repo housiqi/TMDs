@@ -329,8 +329,9 @@ route can be requested.  For the route of the paper's Fig. 4 write
 
 `nseg[j]` is the number of k-points on segment `j` (the straight line
 `points[j] -> points[j+1]`), endpoints included; a shared endpoint is stored only
-once, so `kpts` has `sum(nseg) - (length(points) - 1)` entries.  `nodes[j]` is the
-index in `kpts` of `points[j]`, i.e. `kpts[nodes[j]] == points[j]`.
+once -- every segment but the first drops its own first point -- so `kpts` has
+`sum(nseg) - (length(points) - 2)` entries.  `nodes[j]` is the index in `kpts` of
+`points[j]`, i.e. `kpts[nodes[j]] == points[j]`.
 """
 function bz_path(geo::MoireGeometry, points::AbstractVector{<:AbstractVector};
                  nseg::AbstractVector{<:Integer} = fill(40, length(points) - 1))

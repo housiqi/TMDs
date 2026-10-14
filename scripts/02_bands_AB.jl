@@ -51,7 +51,8 @@ cG = valence_bands(geo, basG, AB_GAMMA, :AB_Gamma, path; nbands = 6)
 ticks = (cK.d[cK.nodes], [raw"$\Gamma_M$", raw"$K_M$", raw"$M_M$", raw"$\Gamma_M$"])
 plt = plot(; ylabel = raw"$E - E_{VBM}$  (meV)",
            ylim = (-100.0, 5.0), title = raw"AB-stacked MoTe$_2$, θ = 3.89°",
-           titlefontsize = 10, legend = :bottomright, legendfontsize = 8,
+           titlefontsize = 8, legend = :bottomright, legendfontsize = 8,
+           titlelocation = (0.5, 1.02),
            size = (640, 420), xticks = ticks,
            framestyle = :box, grid = false, left_margin = 8Plots.mm)
 for (lab, col, dat) in (("±K valley", C_K, cK), ("Γ valley", C_G, cG))
@@ -73,7 +74,8 @@ plt2 = plot(; ylabel = raw"$E - E_{VBM}$  (meV)",
             # raw"..." cannot interpolate $NSHELL, hence the concat: the LaTeX part
             # stays raw, the counter is interpolated.
             title = raw"AB-stacked MoTe$_2$" * ": Γ-valley flat bands (Nshell = $NSHELL)",
-            titlefontsize = 10, legend = :bottomright, legendfontsize = 8,
+            titlefontsize = 8, legend = :bottomright, legendfontsize = 8,
+            titlelocation = (0.5, 1.02),
             size = (640, 420), xticks = ticks, framestyle = :box, grid = false,
             left_margin = 8Plots.mm)
 for j in 1:size(cG.E, 2)
